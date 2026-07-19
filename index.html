@@ -172,7 +172,7 @@ let editingId = null;
 let searchQuery = "";
 let statusFilter = "all";
 let photoUrlCache = {};
-let formPhotos = new Array(10).fill(null); // {fileId} or {pendingBlob, name} or null
+let formPhotos = []; // dynamic array of {fileId} or {pendingFile, previewUrl, name}, max 10
 
 /* =========================== INIT =========================== */
 window.addEventListener("load", () => {
@@ -522,10 +522,7 @@ function itemCard(it) {
 function renderForm() {
   const editing = editingId ? items.find(i => i.id === editingId) : null;
   const it = editing || { status: "gudang", panjang: "", lebar: "", tinggi: "" };
-  formPhotos = new Array(10).fill(null);
-  if (editing && editing.photos) {
-    editing.photos.forEach((p, idx) => { if (p) formPhotos[idx] = p; });
-  }
+  formPhotos = (editing && editing.photos) ? editing.photos.filter(Boolean).map(p => ({ fileId: p.fileId })) : [];
 
   return `
   <div class="font-display" style="font-size:13px; color:var(--ink-soft); margin-bottom:4px;">— ${editing ? "Ubah Data" : "Catatan Baru"} —</div>
@@ -583,7 +580,8 @@ function renderForm() {
     </div>
 
     <div style="margin-bottom:14px;">
-      <label>Foto Barang (maks. 10)</label>
+      <label>Foto Barang</label>
+      <div id="photo-count" style="font-size:12px; color:var(--ink-soft); margin-bottom:8px;"></div>
       <div id="photo-grid" style="display:grid; grid-template-columns:repeat(5,1fr); gap:10px;"></div>
     </div>
 
@@ -601,19 +599,31 @@ function renderForm() {
   `;
 }
 
+let lightboxIndex = null;
+
 function renderPhotoGrid() {
   const grid = document.getElementById("photo-grid");
   if (!grid) return;
-  grid.innerHTML = formPhotos.map((p, idx) => {
-    if (!p) {
-      return `<div class="photo-slot" data-slot="${idx}"><span style="font-size:22px; color:var(--ink-soft);">+</span></div>`;
-    }
-    return `<div class="photo-slot" data-slot-filled="${idx}"><img data-slot-img="${idx}" alt="foto ${idx+1}"/><div class="rm" data-remove-slot="${idx}">×</div></div>`;
-  }).join("");
+  const countEl = document.getElementById("photo-count");
+  if (countEl) countEl.textContent = `${formPhotos.length} / 10 foto`;
+
+  let html = formPhotos.map((p, idx) =>
+    `<div class="photo-slot" data-view-idx="${idx}"><img data-slot-img="${idx}" alt="foto ${idx+1}"/><div class="rm" data-remove-idx="${idx}">×</div></div>`
+  ).join("");
+
+  if (formPhotos.length < 10) {
+    html += `<div class="photo-slot" id="add-photo-tile">
+      <div style="display:flex; flex-direction:column; align-items:center; gap:2px; color:var(--ink-soft);">
+        <span style="font-size:22px; line-height:1;">+</span>
+        <span style="font-size:10px;">Tambah Foto</span>
+      </div>
+    </div>`;
+  }
+  grid.innerHTML = html;
 
   formPhotos.forEach((p, idx) => {
-    if (!p) return;
     const img = grid.querySelector(`[data-slot-img="${idx}"]`);
+    if (!img) return;
     if (p.fileId) {
       getPhotoUrl(p.fileId).then(url => { if (img) img.src = url; });
     } else if (p.previewUrl) {
@@ -621,35 +631,106 @@ function renderPhotoGrid() {
     }
   });
 
-  grid.querySelectorAll("[data-slot]").forEach(slotEl => {
-    slotEl.addEventListener("click", () => {
-      const idx = parseInt(slotEl.dataset.slot, 10);
+  const addTile = document.getElementById("add-photo-tile");
+  if (addTile) {
+    addTile.addEventListener("click", () => {
       const input = document.createElement("input");
       input.type = "file";
       input.accept = "image/*";
+      input.multiple = true;
       input.onchange = () => {
-        const file = input.files[0];
-        if (!file) return;
-        formPhotos[idx] = { pendingFile: file, previewUrl: URL.createObjectURL(file), name: file.name };
+        const remaining = 10 - formPhotos.length;
+        const files = Array.from(input.files).slice(0, remaining);
+        if (input.files.length > remaining) {
+          alert(`Hanya ${remaining} foto lagi yang bisa ditambahkan (maks. 10 foto per barang). ${input.files.length - remaining} foto terakhir tidak ditambahkan.`);
+        }
+        files.forEach(file => {
+          formPhotos.push({ pendingFile: file, previewUrl: URL.createObjectURL(file), name: file.name });
+        });
         renderPhotoGrid();
       };
       input.click();
     });
+  }
+
+  grid.querySelectorAll("[data-view-idx]").forEach(slotEl => {
+    slotEl.addEventListener("click", (e) => {
+      if (e.target.closest("[data-remove-idx]")) return;
+      openLightbox(parseInt(slotEl.dataset.viewIdx, 10));
+    });
   });
 
-  grid.querySelectorAll("[data-remove-slot]").forEach(btn => {
+  grid.querySelectorAll("[data-remove-idx]").forEach(btn => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      const idx = parseInt(btn.dataset.removeSlot, 10);
+      const idx = parseInt(btn.dataset.removeIdx, 10);
       const removed = formPhotos[idx];
-      formPhotos[idx] = null;
+      formPhotos.splice(idx, 1);
       renderPhotoGrid();
       if (removed && removed.fileId) {
-        // mark for deletion on save; keep simple by deleting immediately from Drive
         deleteDriveFile(removed.fileId);
       }
     });
   });
+}
+
+async function openLightbox(idx) {
+  lightboxIndex = idx;
+  await renderLightbox();
+  document.addEventListener("keydown", handleLightboxKey);
+}
+
+function closeLightbox() {
+  lightboxIndex = null;
+  document.getElementById("modal-root").innerHTML = "";
+  document.removeEventListener("keydown", handleLightboxKey);
+}
+
+function handleLightboxKey(e) {
+  if (lightboxIndex === null) return;
+  if (e.key === "Escape") closeLightbox();
+  if (e.key === "ArrowLeft") navigateLightbox(-1);
+  if (e.key === "ArrowRight") navigateLightbox(1);
+}
+
+function navigateLightbox(dir) {
+  if (lightboxIndex === null || formPhotos.length === 0) return;
+  lightboxIndex = (lightboxIndex + dir + formPhotos.length) % formPhotos.length;
+  renderLightbox();
+}
+
+async function renderLightbox() {
+  if (lightboxIndex === null) return;
+  const p = formPhotos[lightboxIndex];
+  if (!p) { closeLightbox(); return; }
+  let url = p.previewUrl;
+  if (!url && p.fileId) url = await getPhotoUrl(p.fileId);
+  if (lightboxIndex === null) return; // closed while awaiting
+
+  const root = document.getElementById("modal-root");
+  root.innerHTML = `
+  <div class="modal-bg" id="lightbox-modal" style="background:rgba(20,17,14,0.92);">
+    <div style="position:relative; max-width:92vw; max-height:88vh; display:flex; align-items:center; justify-content:center;">
+      <img src="${url}" style="max-width:92vw; max-height:80vh; object-fit:contain; border-radius:4px; box-shadow:0 8px 30px rgba(0,0,0,0.5);" />
+      <button id="lightbox-close" title="Kembali" style="position:absolute; top:-46px; right:0; background:rgba(255,255,255,0.12); border:none; color:#fff; font-size:22px; width:38px; height:38px; border-radius:50%; cursor:pointer; line-height:1;">×</button>
+      ${formPhotos.length > 1 ? `
+      <button id="lightbox-prev" title="Sebelumnya" style="position:absolute; left:8px; top:50%; transform:translateY(-50%); background:rgba(255,255,255,0.15); border:none; color:#fff; font-size:22px; width:42px; height:42px; border-radius:50%; cursor:pointer;">‹</button>
+      <button id="lightbox-next" title="Berikutnya" style="position:absolute; right:8px; top:50%; transform:translateY(-50%); background:rgba(255,255,255,0.15); border:none; color:#fff; font-size:22px; width:42px; height:42px; border-radius:50%; cursor:pointer;">›</button>
+      ` : ""}
+      <div class="font-mono" style="position:absolute; bottom:-30px; left:0; right:0; text-align:center; color:#fff; font-size:12px;">${lightboxIndex + 1} / ${formPhotos.length}</div>
+    </div>
+    <button id="lightbox-back" class="btn" style="position:absolute; bottom:24px; left:50%; transform:translateX(-50%);">Kembali ke Daftar Foto</button>
+  </div>`;
+
+  document.getElementById("lightbox-close").addEventListener("click", closeLightbox);
+  document.getElementById("lightbox-back").addEventListener("click", closeLightbox);
+  document.getElementById("lightbox-modal").addEventListener("click", (e) => {
+    if (e.target.id === "lightbox-modal") closeLightbox();
+  });
+  if (formPhotos.length > 1) {
+    document.getElementById("lightbox-prev").addEventListener("click", () => navigateLightbox(-1));
+    document.getElementById("lightbox-next").addEventListener("click", () => navigateLightbox(1));
+  }
 }
 
 function getMissingFields() {
@@ -745,7 +826,7 @@ async function doSave() {
     tinggi: data.tinggi,
     berat: data.berat,
     keterangan: data.keterangan,
-    photos: formPhotos.map(p => (p && p.fileId) ? { fileId: p.fileId } : null),
+    photos: formPhotos.filter(p => p && p.fileId).map(p => ({ fileId: p.fileId })),
     createdAt: isEdit ? (items.find(i => i.id === id).createdAt || now) : now,
     updatedAt: now,
   };
