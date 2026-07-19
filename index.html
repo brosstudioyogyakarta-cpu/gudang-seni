@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Gudang Seni — Pencatatan Barang</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  :root{
+    --kraft:#EFE7D6;
+    --kraft-dark:#E3D8BF;
+    --ink:#221E1A;
+    --ink-soft:#5B5347;
+    --line:#C9BFA8;
+    --stamp-blue:#2B4A6B;
+    --stamp-blue-bg:#DCE6EE;
+    --stamp-green:#2F6B47;
+    --stamp-green-bg:#DEEBE0;
+    --stamp-red:#9C3B2E;
+    --paper-white:#FBF9F2;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--kraft);
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(34,30,26,0.05) 1px, transparent 0);
+    background-size: 22px 22px;
+    color:var(--ink);
+    font-family:'IBM Plex Sans', sans-serif;
+    min-height:100vh;
+  }
+  .font-display{font-family:'Oswald', sans-serif; letter-spacing:0.03em; text-transform:uppercase;}
+  .font-mono{font-family:'IBM Plex Mono', monospace;}
+  .paper{
+    background:var(--paper-white);
+    border:1px solid var(--line);
+    box-shadow: 3px 3px 0 rgba(34,30,26,0.08);
+  }
+  .stamp{
+    display:inline-flex; align-items:center; gap:6px;
+    font-family:'Oswald', sans-serif; font-weight:600; letter-spacing:0.08em;
+    text-transform:uppercase; font-size:11px; padding:4px 10px;
+    border:2px solid currentColor; border-radius:3px;
+    transform: rotate(-1.5deg);
+  }
+  .stamp-gudang{ color:var(--stamp-blue); background:var(--stamp-blue-bg); }
+  .stamp-terkirim{ color:var(--stamp-green); background:var(--stamp-green-bg); transform: rotate(1.2deg); }
+  .btn{
+    font-family:'Oswald', sans-serif; text-transform:uppercase; letter-spacing:0.05em;
+    font-weight:600; font-size:13px; padding:10px 18px; border-radius:2px;
+    border:1.5px solid var(--ink); cursor:pointer; transition:transform .08s ease;
+    background:var(--ink); color:var(--paper-white);
+  }
+  .btn:hover{ transform:translateY(-1px); }
+  .btn:active{ transform:translateY(0px); }
+  .btn-outline{ background:transparent; color:var(--ink); }
+  .btn-danger{ background:var(--stamp-red); border-color:var(--stamp-red); color:#fff; }
+  .btn:disabled{ opacity:0.45; cursor:not-allowed; transform:none; }
+  input, select, textarea{
+    font-family:'IBM Plex Sans', sans-serif;
+    background:var(--paper-white);
+    border:1.5px solid var(--line);
+    border-radius:2px;
+    padding:9px 11px;
+    font-size:14px;
+    width:100%;
+    color:var(--ink);
+  }
+  input:focus, select:focus, textarea:focus{
+    outline:2px solid var(--stamp-blue);
+    outline-offset:1px;
+    border-color:var(--stamp-blue);
+  }
+  label{ font-size:12px; font-weight:600; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; display:block; }
+  .tab-btn{
+    font-family:'Oswald', sans-serif; text-transform:uppercase; letter-spacing:0.04em;
+    font-weight:600; font-size:13px; padding:10px 16px; cursor:pointer;
+    border-bottom:3px solid transparent; color:var(--ink-soft); background:none; border-top:none; border-left:none; border-right:none;
+  }
+  .tab-btn.active{ color:var(--ink); border-bottom-color:var(--stamp-red); }
+  .photo-slot{
+    aspect-ratio:1/1; border:1.5px dashed var(--line); border-radius:3px;
+    display:flex; align-items:center; justify-content:center; position:relative;
+    background:var(--kraft-dark); cursor:pointer; overflow:hidden;
+  }
+  .photo-slot img{ width:100%; height:100%; object-fit:cover; }
+  .photo-slot .rm{
+    position:absolute; top:3px; right:3px; background:var(--stamp-red); color:#fff;
+    width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:13px; line-height:1; cursor:pointer; border:1px solid #fff;
+  }
+  .modal-bg{ position:fixed; inset:0; background:rgba(34,30,26,0.55); display:flex; align-items:center; justify-content:center; padding:16px; z-index:50; }
+  .card-tag{ position:relative; }
+  .card-tag::before{
+    content:''; position:absolute; top:12px; left:-6px; width:12px; height:12px;
+    background:var(--kraft); border-radius:50%; border-right:1.5px solid var(--line);
+  }
+  .spinner{ width:18px; height:18px; border:2.5px solid rgba(34,30,26,0.2); border-top-color:var(--ink); border-radius:50%; animation:spin .7s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg);} }
+  ::placeholder{ color:#A9A08C; }
+  .req::after{ content:' *'; color:var(--stamp-red); }
+</style>
+</head>
+<body>
+
+<!-- ======================= LOGIN SCREEN ======================= -->
+<div id="login-screen" style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;">
+  <div class="paper" style="max-width:460px; width:100%; padding:36px;">
+    <div class="font-display" style="font-size:13px; color:var(--ink-soft); margin-bottom:6px;">— Sistem Pencatatan —</div>
+    <h1 class="font-display" style="font-size:34px; margin:0 0 18px 0; line-height:1.1;">Gudang Seni</h1>
+    <p style="font-size:14px; color:var(--ink-soft); line-height:1.6; margin-bottom:22px;">
+      Data barang tersimpan langsung di Google Drive milik Anda sendiri — bukan di server pihak lain. Hubungkan akun Google untuk mulai.
+    </p>
+    <button id="btn-signin" class="btn" style="width:100%;">Hubungkan Google Drive</button>
+    <div id="login-status" style="margin-top:14px; font-size:13px; color:var(--stamp-red);"></div>
+    <div id="config-warning" style="display:none; margin-top:18px; padding:12px; background:#FBEFE8; border:1.5px solid var(--stamp-red); border-radius:3px; font-size:12.5px; line-height:1.6;">
+      <strong>Belum dikonfigurasi.</strong> Buka file <span class="font-mono">index.html</span>, cari bagian <span class="font-mono">CONFIG</span> di awal script, dan isi <span class="font-mono">CLIENT_ID</span> dengan Client ID dari Google Cloud Console Anda. Lihat panduan setup yang menyertai file ini.
+    </div>
+  </div>
+</div>
+
+<!-- ======================= APP SCREEN ======================= -->
+<div id="app-screen" style="display:none;">
+  <header class="paper" style="border-left:none; border-right:none; border-top:none; padding:14px 22px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:20; flex-wrap:wrap; gap:10px;">
+    <div style="display:flex; align-items:center; gap:14px;">
+      <div class="font-display" style="font-size:20px;">Gudang Seni</div>
+      <nav style="display:flex; gap:4px;">
+        <button class="tab-btn" data-tab="dashboard">Dashboard</button>
+        <button class="tab-btn" data-tab="daftar">Daftar Barang</button>
+        <button class="tab-btn" data-tab="tambah">Tambah Barang</button>
+        <button class="tab-btn" data-tab="pengaturan">Pengaturan</button>
+      </nav>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span id="sync-indicator" style="font-size:12px; color:var(--ink-soft); display:flex; align-items:center; gap:6px;"></span>
+      <button id="btn-signout" class="btn btn-outline" style="font-size:11px; padding:7px 12px;">Keluar</button>
+    </div>
+  </header>
+
+  <main id="main-content" style="max-width:1100px; margin:0 auto; padding:24px 18px 60px 18px;"></main>
+</div>
+
+<!-- ======================= MODALS ======================= -->
+<div id="modal-root"></div>
+
+<script>
+/* =======================================================================
+   KONFIGURASI — WAJIB DIISI SEBELUM APLIKASI BISA DIPAKAI
+   Ikuti PANDUAN-SETUP.md untuk membuat Client ID ini (gratis, dari Google
+   Cloud Console). Tempel Client ID Anda di bawah ini.
+   ======================================================================= */
+const CONFIG = {
+  CLIENT_ID: "693894926999-k1a9boq16orb27oic43nk4514ri5na5v.apps.googleusercontent.com",
+};
+const FOLDER_NAME = "GudangSeniApp_Data";
+const DB_FILE_NAME = "database.json";
+const SCOPE = "https://www.googleapis.com/auth/drive.file";
+
+/* =========================== STATE =========================== */
+let tokenClient = null;
+let accessToken = null;
+let folderId = null;
+let dbFileId = null;
+let items = [];
+let currentTab = "dashboard";
+let editingId = null;
+let searchQuery = "";
+let statusFilter = "all";
+let photoUrlCache = {};
+let formPhotos = new Array(10).fill(null); // {fileId} or {pendingBlob, name} or null
+
+/* =========================== INIT =========================== */
+window.addEventListener("load", () => {
+  if (!CONFIG.CLIENT_ID || CONFIG.CLIENT_ID.startsWith("GANTI_DENGAN")) {
+    document.getElementById("config-warning").style.display = "block";
+    document.getElementById("btn-signin").disabled = true;
+    return;
+  }
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CONFIG.CLIENT_ID,
+    scope: SCOPE,
+    callback: async (resp) => {
+      if (resp.error) {
+        setLoginStatus("Gagal masuk: " + resp.error);
+        return;
+      }
+      accessToken = resp.access_token;
+      await onSignedIn();
+    },
+  });
+  document.getElementById("btn-signin").addEventListener("click", () => {
+    setLoginStatus("");
+    tokenClient.requestAccessToken({ prompt: "consent" });
+  });
+  document.getElementById("btn-signout").addEventListener("click", signOut);
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+  });
+});
+
+function setLoginStatus(msg) {
+  document.getElementById("login-status").textContent = msg;
+}
+
+function signOut() {
+  if (accessToken) {
+    google.accounts.oauth2.revoke(accessToken, () => {});
+  }
+  accessToken = null;
+  items = [];
+  folderId = null;
+  dbFileId = null;
+  photoUrlCache = {};
+  document.getElementById("app-screen").style.display = "none";
+  document.getElementById("login-screen").style.display = "flex";
+}
+
+async function onSignedIn() {
+  document.getElementById("login-screen").style.display = "none";
+  document.getElementById("app-screen").style.display = "block";
+  setSync("Menyiapkan data…", true);
+  try {
+    folderId = await findOrCreateFolder();
+    dbFileId = await findOrCreateDbFile(folderId);
+    items = await loadDatabase(dbFileId);
+    setSync("Tersimpan di Drive", false);
+    switchTab("dashboard");
+  } catch (e) {
+    console.error(e);
+    setSync("Gagal memuat data. Coba refresh.", false);
+  }
+}
+
+function setSync(msg, loading) {
+  const el = document.getElementById("sync-indicator");
+  el.innerHTML = (loading ? '<span class="spinner"></span>' : "") + "<span>" + msg + "</span>";
+}
+
+/* =========================== DRIVE HELPERS =========================== */
+function authHeaders(extra) {
+  return Object.assign({ Authorization: "Bearer " + accessToken }, extra || {});
+}
+
+async function findOrCreateFolder() {
+  const q = encodeURIComponent(`name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`, { headers: authHeaders() });
+  const data = await res.json();
+  if (data.files && data.files.length > 0) return data.files[0].id;
+  const createRes = await fetch("https://www.googleapis.com/drive/v3/files", {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ name: FOLDER_NAME, mimeType: "application/vnd.google-apps.folder" }),
+  });
+  const created = await createRes.json();
+  return created.id;
+}
+
+async function findOrCreateDbFile(folderId) {
+  const q = encodeURIComponent(`name='${DB_FILE_NAME}' and '${folderId}' in parents and trashed=false`);
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`, { headers: authHeaders() });
+  const data = await res.json();
+  if (data.files && data.files.length > 0) return data.files[0].id;
+  const meta = await uploadMultipart(folderId, DB_FILE_NAME, "application/json", JSON.stringify({ items: [] }));
+  return meta.id;
+}
+
+async function loadDatabase(fileId) {
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers: authHeaders() });
+  const text = await res.text();
+  try {
+    const parsed = JSON.parse(text);
+    return parsed.items || [];
+  } catch (e) {
+    return [];
+  }
+}
+
+async function saveDatabase() {
+  setSync("Menyimpan…", true);
+  await fetch(`https://www.googleapis.com/upload/drive/v3/files/${dbFileId}?uploadType=media`, {
+    method: "PATCH",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ items }),
+  });
+  setSync("Tersimpan di Drive", false);
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function uploadMultipart(parentId, filename, mimeType, contentStringOrBlob) {
+  const boundary = "gudangseni_boundary_" + Date.now();
+  const delimiter = "\r\n--" + boundary + "\r\n";
+  const closeDelim = "\r\n--" + boundary + "--";
+  const metadata = { name: filename };
+  if (parentId) metadata.parents = [parentId];
+
+  let base64Data;
+  if (contentStringOrBlob instanceof Blob) {
+    base64Data = await blobToBase64(contentStringOrBlob);
+  } else {
+    base64Data = btoa(unescape(encodeURIComponent(contentStringOrBlob)));
+  }
+
+  const body =
+    delimiter +
+    "Content-Type: application/json; charset=UTF-8\r\n\r\n" +
+    JSON.stringify(metadata) +
+    delimiter +
+    "Content-Type: " + mimeType + "\r\n" +
+    "Content-Transfer-Encoding: base64\r\n\r\n" +
+    base64Data +
+    closeDelim;
+
+  const res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name", {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": 'multipart/related; boundary="' + boundary + '"' }),
+    body,
+  });
+  return res.json();
+}
+
+async function deleteDriveFile(fileId) {
+  try {
+    await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, { method: "DELETE", headers: authHeaders() });
+  } catch (e) { /* ignore */ }
+}
+
+async function getPhotoUrl(fileId) {
+  if (photoUrlCache[fileId]) return photoUrlCache[fileId];
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers: authHeaders() });
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  photoUrlCache[fileId] = url;
+  return url;
+}
+
+/* =========================== UTIL =========================== */
+function generateId() {
+  let max = 0;
+  items.forEach(it => {
+    const m = /SN-(\d+)/.exec(it.id || "");
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  });
+  return "SN-" + String(max + 1).padStart(4, "0");
+}
+
+function fmtDate(iso) {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  return d.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" }) +
+    " " + d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+}
+
+function escapeHtml(s) {
+  return (s || "").toString().replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function statusBadge(status) {
+  if (status === "terkirim") {
+    return `<span class="stamp stamp-terkirim">Sudah Dikirim</span>`;
+  }
+  return `<span class="stamp stamp-gudang">Di Gudang</span>`;
+}
+
+/* =========================== TAB SWITCH =========================== */
+function switchTab(tab) {
+  currentTab = tab;
+  editingId = editingId && tab === "tambah" ? editingId : (tab === "tambah" ? null : editingId);
+  if (tab !== "tambah") editingId = null;
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
+  render();
+}
+
+function render() {
+  const main = document.getElementById("main-content");
+  if (currentTab === "dashboard") main.innerHTML = renderDashboard();
+  else if (currentTab === "daftar") main.innerHTML = renderDaftar();
+  else if (currentTab === "tambah") main.innerHTML = renderForm();
+  else if (currentTab === "pengaturan") main.innerHTML = renderPengaturan();
+  attachHandlers();
+}
+
+/* =========================== DASHBOARD =========================== */
+function renderDashboard() {
+  const total = items.length;
+  const diGudang = items.filter(i => i.status !== "terkirim").length;
+  const terkirim = items.filter(i => i.status === "terkirim").length;
+  const totalBerat = items.reduce((s, i) => s + (parseFloat(i.berat) || 0), 0);
+  const recent = [...items].sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || "")).slice(0, 6);
+
+  return `
+  <div class="font-display" style="font-size:13px; color:var(--ink-soft); margin-bottom:4px;">— Ringkasan —</div>
+  <h2 class="font-display" style="font-size:26px; margin:0 0 20px 0;">Dashboard Gudang</h2>
+  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px; margin-bottom:28px;">
+    ${statCard("Total Barang", total, "")}
+    ${statCard("Di Gudang", diGudang, "var(--stamp-blue)")}
+    ${statCard("Sudah Dikirim", terkirim, "var(--stamp-green)")}
+    ${statCard("Total Berat", totalBerat.toLocaleString("id-ID") + " kg", "")}
+  </div>
+  <div class="font-display" style="font-size:14px; margin-bottom:10px;">Aktivitas Terbaru</div>
+  <div class="paper" style="padding:6px;">
+    ${recent.length === 0 ? emptyState("Belum ada barang tercatat.") : recent.map(rowRecent).join("")}
+  </div>
+  `;
+}
+
+function statCard(label, value, accent) {
+  return `<div class="paper" style="padding:16px 18px; ${accent ? `border-left:4px solid ${accent};` : ""}">
+    <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--ink-soft); font-weight:600;">${label}</div>
+    <div class="font-mono" style="font-size:26px; font-weight:600; margin-top:4px;">${value}</div>
+  </div>`;
+}
+
+function rowRecent(it) {
+  return `<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-bottom:1px solid var(--line);">
+    <div>
+      <span class="font-mono" style="font-size:12px; color:var(--ink-soft);">${it.id}</span>
+      <span style="margin-left:10px; font-weight:600;">${escapeHtml(it.kepada) || "(tanpa nama)"}</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span style="font-size:12px; color:var(--ink-soft);">${fmtDate(it.updatedAt)}</span>
+      ${statusBadge(it.status)}
+    </div>
+  </div>`;
+}
+
+function emptyState(msg) {
+  return `<div style="padding:32px; text-align:center; color:var(--ink-soft); font-size:14px;">${msg}</div>`;
+}
+
+/* =========================== DAFTAR / PENCARIAN =========================== */
+function renderDaftar() {
+  const filtered = items.filter(it => {
+    if (statusFilter !== "all" && (it.status || "gudang") !== statusFilter) return false;
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return [it.id, it.kepada, it.alamat, it.pengirimPenerima, it.keterangan]
+      .some(f => (f || "").toLowerCase().includes(q));
+  }).sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+
+  return `
+  <div class="font-display" style="font-size:13px; color:var(--ink-soft); margin-bottom:4px;">— Cari & Kelola —</div>
+  <h2 class="font-display" style="font-size:26px; margin:0 0 18px 0;">Daftar Barang</h2>
+  <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; align-items:center;">
+    <input id="search-input" placeholder="Cari nama, alamat, ID, keterangan…" value="${escapeHtml(searchQuery)}" style="max-width:320px;" />
+    <div style="display:flex; gap:6px;">
+      <button class="btn ${statusFilter === "all" ? "" : "btn-outline"}" data-filter="all" style="padding:8px 14px; font-size:12px;">Semua</button>
+      <button class="btn ${statusFilter === "gudang" ? "" : "btn-outline"}" data-filter="gudang" style="padding:8px 14px; font-size:12px;">Di Gudang</button>
+      <button class="btn ${statusFilter === "terkirim" ? "" : "btn-outline"}" data-filter="terkirim" style="padding:8px 14px; font-size:12px;">Terkirim</button>
+    </div>
+    <button id="btn-export-csv" class="btn btn-outline" style="padding:8px 14px; font-size:12px; margin-left:auto;">Ekspor CSV</button>
+  </div>
+  <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px;">
+    ${filtered.length === 0 ? emptyState("Tidak ada barang yang cocok.") : filtered.map(itemCard).join("")}
+  </div>
+  `;
+}
+
+function itemCard(it) {
+  const dims = [it.panjang, it.lebar, it.tinggi].filter(Boolean).join(" × ");
+  return `<div class="paper card-tag" style="padding:16px; padding-left:22px;" data-open="${it.id}">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+      <span class="font-mono" style="font-size:12px; color:var(--ink-soft);">${it.id}</span>
+      ${statusBadge(it.status)}
+    </div>
+    <div style="font-weight:600; font-size:15px; margin-bottom:2px;">${escapeHtml(it.kepada) || "(tanpa nama)"}</div>
+    <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:8px;">${escapeHtml(it.alamat) || "-"}</div>
+    <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--ink-soft);">
+      <span>${dims ? dims + " cm" : "-"}</span>
+      <span>${it.berat ? it.berat + " kg" : "-"}</span>
+    </div>
+    <button class="btn btn-outline" data-open-btn="${it.id}" style="width:100%; margin-top:12px; padding:7px; font-size:11px;">Lihat / Edit</button>
+  </div>`;
+}
+
+/* =========================== FORM TAMBAH/EDIT =========================== */
+function renderForm() {
+  const editing = editingId ? items.find(i => i.id === editingId) : null;
+  const it = editing || { status: "gudang", panjang: "", lebar: "", tinggi: "" };
+  formPhotos = new Array(10).fill(null);
+  if (editing && editing.photos) {
+    editing.photos.forEach((p, idx) => { if (p) formPhotos[idx] = p; });
+  }
+
+  return `
+  <div class="font-display" style="font-size:13px; color:var(--ink-soft); margin-bottom:4px;">— ${editing ? "Ubah Data" : "Catatan Baru"} —</div>
+  <h2 class="font-display" style="font-size:26px; margin:0 0 4px 0;">${editing ? "Edit Barang " + editing.id : "Tambah Barang"}</h2>
+  ${editing ? `<div style="font-size:12px; color:var(--ink-soft); margin-bottom:18px;">Dibuat ${fmtDate(editing.createdAt)} · Terakhir diubah ${fmtDate(editing.updatedAt)}</div>` : `<div style="margin-bottom:18px;"></div>`}
+
+  <div class="paper" style="padding:22px;">
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px;">
+      <div>
+        <label class="req">Diterima / Dikirim</label>
+        <select id="f-status">
+          <option value="gudang" ${it.status !== "terkirim" ? "selected" : ""}>Diterima (Masuk Gudang)</option>
+          <option value="terkirim" ${it.status === "terkirim" ? "selected" : ""}>Dikirim (Keluar Gudang)</option>
+        </select>
+      </div>
+      <div>
+        <label class="req">Kepada</label>
+        <input id="f-kepada" value="${escapeHtml(it.kepada)}" placeholder="Nama tujuan / penerima" />
+      </div>
+    </div>
+
+    <div style="margin-bottom:14px;">
+      <label class="req">Alamat</label>
+      <input id="f-alamat" value="${escapeHtml(it.alamat)}" placeholder="Alamat lengkap" />
+    </div>
+
+    <div style="margin-bottom:14px;">
+      <label class="req">Pengirim / Penerima</label>
+      <input id="f-pengirim" value="${escapeHtml(it.pengirimPenerima)}" placeholder="Nama pihak pengirim atau penerima" />
+    </div>
+
+    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:14px;">
+      <div>
+        <label class="req">Panjang (cm)</label>
+        <input id="f-panjang" type="number" min="0" step="0.1" value="${escapeHtml(it.panjang)}" />
+      </div>
+      <div>
+        <label class="req">Lebar (cm)</label>
+        <input id="f-lebar" type="number" min="0" step="0.1" value="${escapeHtml(it.lebar)}" />
+      </div>
+      <div>
+        <label class="req">Tinggi (cm)</label>
+        <input id="f-tinggi" type="number" min="0" step="0.1" value="${escapeHtml(it.tinggi)}" />
+      </div>
+      <div>
+        <label class="req">Berat (kg)</label>
+        <input id="f-berat" type="number" min="0" step="0.1" value="${escapeHtml(it.berat)}" />
+      </div>
+    </div>
+
+    <div style="margin-bottom:14px;">
+      <label>Foto Barang (maks. 10)</label>
+      <div id="photo-grid" style="display:grid; grid-template-columns:repeat(5,1fr); gap:10px;"></div>
+    </div>
+
+    <div style="margin-bottom:20px;">
+      <label>Keterangan</label>
+      <textarea id="f-keterangan" rows="3" placeholder="Catatan tambahan…">${escapeHtml(it.keterangan)}</textarea>
+    </div>
+
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button id="btn-save" class="btn">${editing ? "Simpan Perubahan" : "Simpan Barang"}</button>
+      ${editing ? `<button id="btn-delete" class="btn btn-danger">Hapus Barang</button>` : ""}
+      <button id="btn-cancel" class="btn btn-outline">Batal</button>
+    </div>
+  </div>
+  `;
+}
+
+function renderPhotoGrid() {
+  const grid = document.getElementById("photo-grid");
+  if (!grid) return;
+  grid.innerHTML = formPhotos.map((p, idx) => {
+    if (!p) {
+      return `<div class="photo-slot" data-slot="${idx}"><span style="font-size:22px; color:var(--ink-soft);">+</span></div>`;
+    }
+    return `<div class="photo-slot" data-slot-filled="${idx}"><img data-slot-img="${idx}" alt="foto ${idx+1}"/><div class="rm" data-remove-slot="${idx}">×</div></div>`;
+  }).join("");
+
+  formPhotos.forEach((p, idx) => {
+    if (!p) return;
+    const img = grid.querySelector(`[data-slot-img="${idx}"]`);
+    if (p.fileId) {
+      getPhotoUrl(p.fileId).then(url => { if (img) img.src = url; });
+    } else if (p.previewUrl) {
+      img.src = p.previewUrl;
+    }
+  });
+
+  grid.querySelectorAll("[data-slot]").forEach(slotEl => {
+    slotEl.addEventListener("click", () => {
+      const idx = parseInt(slotEl.dataset.slot, 10);
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.onchange = () => {
+        const file = input.files[0];
+        if (!file) return;
+        formPhotos[idx] = { pendingFile: file, previewUrl: URL.createObjectURL(file), name: file.name };
+        renderPhotoGrid();
+      };
+      input.click();
+    });
+  });
+
+  grid.querySelectorAll("[data-remove-slot]").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.removeSlot, 10);
+      const removed = formPhotos[idx];
+      formPhotos[idx] = null;
+      renderPhotoGrid();
+      if (removed && removed.fileId) {
+        // mark for deletion on save; keep simple by deleting immediately from Drive
+        deleteDriveFile(removed.fileId);
+      }
+    });
+  });
+}
+
+function getMissingFields() {
+  const required = [
+    ["f-kepada", "Kepada"],
+    ["f-alamat", "Alamat"],
+    ["f-pengirim", "Pengirim/Penerima"],
+    ["f-panjang", "Panjang"],
+    ["f-lebar", "Lebar"],
+    ["f-tinggi", "Tinggi"],
+    ["f-berat", "Berat"],
+  ];
+  const missing = [];
+  required.forEach(([id, label]) => {
+    const val = document.getElementById(id).value.trim();
+    if (!val) missing.push(label);
+  });
+  return missing;
+}
+
+function collectFormData() {
+  return {
+    status: document.getElementById("f-status").value,
+    kepada: document.getElementById("f-kepada").value.trim(),
+    alamat: document.getElementById("f-alamat").value.trim(),
+    pengirimPenerima: document.getElementById("f-pengirim").value.trim(),
+    panjang: document.getElementById("f-panjang").value.trim(),
+    lebar: document.getElementById("f-lebar").value.trim(),
+    tinggi: document.getElementById("f-tinggi").value.trim(),
+    berat: document.getElementById("f-berat").value.trim(),
+    keterangan: document.getElementById("f-keterangan").value.trim(),
+  };
+}
+
+function showConfirmSaveModal(missing, onConfirm) {
+  const root = document.getElementById("modal-root");
+  const missingHtml = missing.length
+    ? `<div style="background:#FBEFE8; border:1.5px solid var(--stamp-red); border-radius:3px; padding:12px; font-size:13px; margin-bottom:16px; text-align:left;">
+         <strong>Belum lengkap:</strong> ${missing.join(", ")}
+       </div>`
+    : "";
+  root.innerHTML = `
+  <div class="modal-bg" id="confirm-modal">
+    <div class="paper" style="max-width:420px; width:100%; padding:26px; text-align:center;">
+      <div class="font-display" style="font-size:19px; margin-bottom:10px;">Periksa Data</div>
+      ${missingHtml}
+      <p style="font-size:14px; color:var(--ink-soft); margin-bottom:20px;">
+        ${missing.length ? "Beberapa kolom masih kosong. Tetap simpan?" : "Apakah data barang ini sudah terisi lengkap dan benar?"}
+      </p>
+      <div style="display:flex; gap:10px; justify-content:center;">
+        <button id="confirm-yes" class="btn">Ya, Simpan</button>
+        <button id="confirm-no" class="btn btn-outline">Periksa Lagi</button>
+      </div>
+    </div>
+  </div>`;
+  document.getElementById("confirm-yes").addEventListener("click", () => {
+    root.innerHTML = "";
+    onConfirm();
+  });
+  document.getElementById("confirm-no").addEventListener("click", () => { root.innerHTML = ""; });
+}
+
+async function doSave() {
+  const data = collectFormData();
+  const isEdit = !!editingId;
+  const id = isEdit ? editingId : generateId();
+  const now = new Date().toISOString();
+
+  setSync("Mengunggah foto…", true);
+  // upload any pending photo files
+  for (let i = 0; i < formPhotos.length; i++) {
+    const p = formPhotos[i];
+    if (p && p.pendingFile) {
+      const uploaded = await uploadMultipart(folderId, `${id}_slot${i}_${Date.now()}.jpg`, p.pendingFile.type || "image/jpeg", p.pendingFile);
+      formPhotos[i] = { fileId: uploaded.id };
+    }
+  }
+
+  const record = {
+    id,
+    status: data.status,
+    kepada: data.kepada,
+    alamat: data.alamat,
+    pengirimPenerima: data.pengirimPenerima,
+    panjang: data.panjang,
+    lebar: data.lebar,
+    tinggi: data.tinggi,
+    berat: data.berat,
+    keterangan: data.keterangan,
+    photos: formPhotos.map(p => (p && p.fileId) ? { fileId: p.fileId } : null),
+    createdAt: isEdit ? (items.find(i => i.id === id).createdAt || now) : now,
+    updatedAt: now,
+  };
+
+  if (isEdit) {
+    items = items.map(i => i.id === id ? record : i);
+  } else {
+    items.push(record);
+  }
+  await saveDatabase();
+  switchTab("daftar");
+}
+
+async function doDelete() {
+  if (!editingId) return;
+  if (!confirm("Hapus barang " + editingId + " beserta foto-fotonya? Tindakan ini tidak bisa dibatalkan.")) return;
+  const it = items.find(i => i.id === editingId);
+  if (it && it.photos) {
+    for (const p of it.photos) { if (p && p.fileId) await deleteDriveFile(p.fileId); }
+  }
+  items = items.filter(i => i.id !== editingId);
+  await saveDatabase();
+  switchTab("daftar");
+}
+
+/* =========================== PENGATURAN =========================== */
+function renderPengaturan() {
+  return `
+  <div class="font-display" style="font-size:13px; color:var(--ink-soft); margin-bottom:4px;">— Pengaturan —</div>
+  <h2 class="font-display" style="font-size:26px; margin:0 0 18px 0;">Pengaturan</h2>
+  <div class="paper" style="padding:20px; margin-bottom:14px;">
+    <div style="font-weight:600; margin-bottom:6px;">Lokasi Penyimpanan</div>
+    <p style="font-size:13.5px; color:var(--ink-soft); line-height:1.6;">
+      Semua data dan foto disimpan di folder <span class="font-mono">${FOLDER_NAME}</span> pada Google Drive akun yang sedang masuk.
+      Data berupa file <span class="font-mono">${DB_FILE_NAME}</span> dan foto sebagai file gambar terpisah.
+    </p>
+  </div>
+  <div class="paper" style="padding:20px;">
+    <div style="font-weight:600; margin-bottom:6px;">Akun</div>
+    <button id="btn-signout-2" class="btn btn-danger" style="margin-top:8px;">Keluar dari Akun</button>
+  </div>
+  `;
+}
+
+/* =========================== CSV EXPORT =========================== */
+function exportCsv() {
+  const headers = ["ID","Status","Kepada","Alamat","Pengirim/Penerima","Panjang","Lebar","Tinggi","Berat","Keterangan","Dibuat","Diubah"];
+  const rows = items.map(it => [
+    it.id, it.status === "terkirim" ? "Dikirim" : "Diterima", it.kepada, it.alamat, it.pengirimPenerima,
+    it.panjang, it.lebar, it.tinggi, it.berat, (it.keterangan||"").replace(/\n/g," "), fmtDate(it.createdAt), fmtDate(it.updatedAt)
+  ]);
+  const csv = [headers, ...rows].map(r => r.map(v => `"${(v??"").toString().replace(/"/g,'""')}"`).join(",")).join("\r\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "gudang-seni-" + new Date().toISOString().slice(0,10) + ".csv";
+  a.click();
+}
+
+/* =========================== DETAIL VIEW MODAL =========================== */
+function openDetail(id) {
+  editingId = id;
+  switchTab("tambah");
+}
+
+/* =========================== EVENT WIRING =========================== */
+function attachHandlers() {
+  if (currentTab === "daftar") {
+    const searchInput = document.getElementById("search-input");
+    if (searchInput) {
+      searchInput.addEventListener("input", (e) => { searchQuery = e.target.value; render(); });
+      searchInput.focus();
+      searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
+    }
+    document.querySelectorAll("[data-filter]").forEach(btn => {
+      btn.addEventListener("click", () => { statusFilter = btn.dataset.filter; render(); });
+    });
+    document.getElementById("btn-export-csv").addEventListener("click", exportCsv);
+    document.querySelectorAll("[data-open-btn]").forEach(btn => {
+      btn.addEventListener("click", () => openDetail(btn.dataset.openBtn));
+    });
+  }
+
+  if (currentTab === "tambah") {
+    renderPhotoGrid();
+    document.getElementById("btn-save").addEventListener("click", () => {
+      const missing = getMissingFields();
+      showConfirmSaveModal(missing, doSave);
+    });
+    document.getElementById("btn-cancel").addEventListener("click", () => switchTab(editingId ? "daftar" : "daftar"));
+    const delBtn = document.getElementById("btn-delete");
+    if (delBtn) delBtn.addEventListener("click", doDelete);
+  }
+
+  if (currentTab === "pengaturan") {
+    document.getElementById("btn-signout-2").addEventListener("click", signOut);
+  }
+}
+</script>
+</body>
+</html>
