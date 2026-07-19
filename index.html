@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Gudang Seni — Pencatatan Barang</title>
+<title>TERJAGA — Pencatatan Barang Seni</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/JsBarcode/3.11.5/JsBarcode.all.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode/1.5.3/qrcode.min.js"></script>
 <style>
   :root{
     --kraft:#EFE7D6;
@@ -112,8 +112,11 @@
 <!-- ======================= LOGIN SCREEN ======================= -->
 <div id="login-screen" style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;">
   <div class="paper" style="max-width:460px; width:100%; padding:36px;">
-    <div class="font-display" style="font-size:13px; color:var(--ink-soft); margin-bottom:6px;">— Sistem Pencatatan —</div>
-    <h1 class="font-display" style="font-size:34px; margin:0 0 18px 0; line-height:1.1;">Gudang Seni</h1>
+    <div style="display:flex; justify-content:center; margin-bottom:18px;">
+      <img id="login-logo" alt="TERJAGA" style="width:120px; height:120px; border-radius:10px; object-fit:cover;" />
+    </div>
+    <div class="font-display" style="font-size:13px; color:var(--ink-soft); margin-bottom:6px; text-align:center;">— Sistem Pencatatan —</div>
+    <h1 class="font-display" style="font-size:34px; margin:0 0 18px 0; line-height:1.1; text-align:center;">Terjaga</h1>
     <p style="font-size:14px; color:var(--ink-soft); line-height:1.6; margin-bottom:22px;">
       Data barang tersimpan langsung di Google Drive milik Anda sendiri — bukan di server pihak lain. Hubungkan akun Google untuk mulai.
     </p>
@@ -129,7 +132,10 @@
 <div id="app-screen" style="display:none;">
   <header class="paper" style="border-left:none; border-right:none; border-top:none; padding:14px 22px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:20; flex-wrap:wrap; gap:10px;">
     <div style="display:flex; align-items:center; gap:14px;">
-      <div class="font-display" style="font-size:20px;">Gudang Seni</div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <img id="header-logo" alt="TERJAGA" style="width:32px; height:32px; border-radius:6px; object-fit:cover;" />
+        <div class="font-display" style="font-size:20px;">Terjaga</div>
+      </div>
       <nav style="display:flex; gap:4px;">
         <button class="tab-btn" data-tab="dashboard">Dashboard</button>
         <button class="tab-btn" data-tab="daftar">Daftar Barang</button>
@@ -161,6 +167,7 @@ const CONFIG = {
 const FOLDER_NAME = "GudangSeniApp_Data";
 const DB_FILE_NAME = "database.json";
 const SCOPE = "https://www.googleapis.com/auth/drive.file";
+const TERJAGA_LOGO_URL = "data:image/webp;base64,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";
 
 /* =========================== STATE =========================== */
 let tokenClient = null;
@@ -177,6 +184,10 @@ let formPhotos = []; // dynamic array of {fileId} or {pendingFile, previewUrl, n
 
 /* =========================== INIT =========================== */
 window.addEventListener("load", () => {
+  const loginLogo = document.getElementById("login-logo");
+  const headerLogo = document.getElementById("header-logo");
+  if (loginLogo) loginLogo.src = TERJAGA_LOGO_URL;
+  if (headerLogo) headerLogo.src = TERJAGA_LOGO_URL;
   if (!CONFIG.CLIENT_ID || CONFIG.CLIENT_ID.startsWith("GANTI_DENGAN")) {
     document.getElementById("config-warning").style.display = "block";
     document.getElementById("btn-signin").disabled = true;
@@ -847,24 +858,17 @@ async function doSave(shouldPrint) {
   }
 }
 
-function generateBarcodeDataUrl(text) {
-  try {
-    const canvas = document.createElement("canvas");
-    window.JsBarcode(canvas, text, {
-      format: "CODE128",
-      displayValue: true,
-      fontSize: 16,
-      font: "monospace",
-      textMargin: 4,
-      width: 2.4,
-      height: 60,
-      margin: 8,
+function generateQrDataUrl(text) {
+  return new Promise((resolve) => {
+    if (!window.QRCode || !window.QRCode.toDataURL) {
+      resolve(null);
+      return;
+    }
+    window.QRCode.toDataURL(text, { width: 260, margin: 1, errorCorrectionLevel: "M" }, (err, url) => {
+      if (err) { console.error("Gagal membuat QR code:", err); resolve(null); return; }
+      resolve(url);
     });
-    return canvas.toDataURL("image/png");
-  } catch (e) {
-    console.error("Gagal membuat barcode:", e);
-    return null;
-  }
+  });
 }
 
 function showPrintSizeModal(item) {
@@ -895,25 +899,16 @@ function showPrintSizeModal(item) {
   });
 }
 
-const TERJAGA_EYE_SVG = `<svg width="42" height="30" viewBox="0 0 100 68" xmlns="http://www.w3.org/2000/svg">
-  <path d="M4 34 Q50 -6 96 34 Q50 74 4 34 Z" fill="none" stroke="#1c1a17" stroke-width="5"/>
-  <circle cx="50" cy="34" r="14" fill="#1c1a17"/>
-  <circle cx="55" cy="29" r="4" fill="#fbf9f2"/>
-  <line x1="50" y1="-4" x2="50" y2="9" stroke="#1c1a17" stroke-width="4" stroke-linecap="round"/>
-  <line x1="19" y1="3" x2="27" y2="15" stroke="#1c1a17" stroke-width="4" stroke-linecap="round"/>
-  <line x1="81" y1="3" x2="73" y2="15" stroke="#1c1a17" stroke-width="4" stroke-linecap="round"/>
-</svg>`;
-
-function buildLabelContent(item, barcodeUrl) {
+function buildLabelContent(item, qrUrl) {
   const dims = [item.panjang, item.lebar, item.tinggi].filter(Boolean).join(" × ");
   return `
     <div class="brand">
-      <div class="eye">${TERJAGA_EYE_SVG}</div>
-      <div class="wordmark">TERJAGA</div>
+      <img class="logo" src="${TERJAGA_LOGO_URL}" alt="TERJAGA" />
     </div>
     <div class="divider"></div>
     <div class="barcode-wrap">
-      ${barcodeUrl ? `<img class="barcode" src="${barcodeUrl}" />` : `<div class="font-mono">${item.id}</div>`}
+      ${qrUrl ? `<img class="barcode" src="${qrUrl}" />` : `<div class="font-mono">${item.id}</div>`}
+      <div class="qr-id">${item.id}</div>
     </div>
     <table class="info-table">
       <tr><td>Seniman/Galeri</td><td>${escapeHtml(item.senimanGaleri) || "-"}</td></tr>
@@ -924,17 +919,17 @@ function buildLabelContent(item, barcodeUrl) {
   `;
 }
 
-function printLabel(item, size) {
-  const barcodeUrl = generateBarcodeDataUrl(item.id);
-  const contentHtml = buildLabelContent(item, barcodeUrl);
+async function printLabel(item, size) {
+  const qrUrl = await generateQrDataUrl(item.id);
+  const contentHtml = buildLabelContent(item, qrUrl);
   let pageCss, containerWidth, scaleCss;
 
   if (size === "a5") {
     pageCss = `@page { size: A5 portrait; margin: 14mm; }`;
     containerWidth = "100%";
     scaleCss = `
-      .wordmark{ font-size:22px; }
-      .barcode{ max-width:300px; }
+      .logo{ width:90px; height:90px; }
+      .barcode{ max-width:210px; }
       .info-table{ font-size:13px; }
       .label-frame{ padding:18px 20px; }
     `;
@@ -944,8 +939,8 @@ function printLabel(item, size) {
     pageCss = `@page { size: ${widthMm}mm auto; margin: 3mm; }`;
     containerWidth = contentWidthMm + "mm";
     scaleCss = `
-      .wordmark{ font-size:${size === "struk58" ? 15 : 17}px; }
-      .barcode{ max-width:100%; }
+      .logo{ width:${size === "struk58" ? 46 : 54}px; height:${size === "struk58" ? 46 : 54}px; }
+      .barcode{ max-width:${size === "struk58" ? 130 : 160}px; }
       .info-table{ font-size:${size === "struk58" ? 9.5 : 10.5}px; }
       .label-frame{ padding:8px 9px; }
     `;
@@ -957,20 +952,18 @@ function printLabel(item, size) {
     return;
   }
   win.document.write(`<!DOCTYPE html><html><head><title>Label ${item.id}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&display=swap" rel="stylesheet">
     <style>
       ${pageCss}
       * { box-sizing:border-box; }
       body { margin:0; padding:8px; display:flex; justify-content:center; font-family: Arial, Helvetica, sans-serif; }
       .label { width:${containerWidth}; }
       .label-frame{ border:2px solid #1c1a17; border-radius:5px; text-align:center; }
-      .brand{ display:flex; flex-direction:column; align-items:center; gap:2px; }
-      .eye{ line-height:0; }
-      .wordmark{ font-family:'Oswald', Arial, sans-serif; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; }
+      .brand{ display:flex; flex-direction:column; align-items:center; }
+      .logo{ object-fit:cover; border-radius:8px; }
       .divider{ border-top:1.5px dashed #1c1a17; margin:8px 0; }
       .barcode-wrap{ margin-bottom:8px; }
       .barcode{ width:100%; display:block; margin:0 auto; }
+      .qr-id{ font-family:monospace; font-size:11px; letter-spacing:1px; margin-top:4px; }
       .info-table{ width:100%; border-collapse:collapse; text-align:left; }
       .info-table td{ padding:4px 2px; border-bottom:1px solid #ccc; vertical-align:top; }
       .info-table tr:last-child td{ border-bottom:none; }
@@ -986,10 +979,7 @@ function printLabel(item, size) {
     printed = true;
     try { win.focus(); win.print(); } catch (e) {}
   };
-  if (win.document.fonts && win.document.fonts.ready) {
-    win.document.fonts.ready.then(triggerPrint).catch(triggerPrint);
-  }
-  setTimeout(triggerPrint, 900);
+  setTimeout(triggerPrint, 500);
 }
 
 async function doDelete() {
@@ -1034,7 +1024,7 @@ function exportCsv() {
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "gudang-seni-" + new Date().toISOString().slice(0,10) + ".csv";
+  a.download = "terjaga-" + new Date().toISOString().slice(0,10) + ".csv";
   a.click();
 }
 
@@ -1055,7 +1045,7 @@ function exportPdf() {
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
-  doc.text("Laporan Gudang Seni", 40, 40);
+  doc.text("Laporan Terjaga", 40, 40);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.text("Dicetak: " + fmtDate(new Date().toISOString()), 40, 58);
@@ -1092,7 +1082,7 @@ function exportPdf() {
     margin: { left: 40, right: 40 },
   });
 
-  doc.save("laporan-gudang-seni-" + new Date().toISOString().slice(0, 10) + ".pdf");
+  doc.save("laporan-terjaga-" + new Date().toISOString().slice(0, 10) + ".pdf");
 }
 
 /* =========================== DETAIL VIEW MODAL =========================== */
