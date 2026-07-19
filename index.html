@@ -9,6 +9,7 @@
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/JsBarcode/3.11.5/JsBarcode.all.min.js"></script>
 <style>
   :root{
     --kraft:#EFE7D6;
@@ -592,6 +593,7 @@ function renderForm() {
 
     <div style="display:flex; gap:10px; flex-wrap:wrap;">
       <button id="btn-save" class="btn">${editing ? "Simpan Perubahan" : "Simpan Barang"}</button>
+      <button id="btn-save-print" class="btn btn-outline">Simpan & Cetak Label</button>
       ${editing ? `<button id="btn-delete" class="btn btn-danger">Hapus Barang</button>` : ""}
       <button id="btn-cancel" class="btn btn-outline">Batal</button>
     </div>
@@ -795,7 +797,7 @@ function showConfirmSaveModal(missing, onConfirm) {
   document.getElementById("confirm-no").addEventListener("click", () => { root.innerHTML = ""; });
 }
 
-async function doSave() {
+async function doSave(shouldPrint) {
   const data = collectFormData();
   const isEdit = !!editingId;
   const id = isEdit ? editingId : generateId();
@@ -837,7 +839,126 @@ async function doSave() {
     items.push(record);
   }
   await saveDatabase();
-  switchTab("daftar");
+
+  if (shouldPrint) {
+    showPrintSizeModal(record);
+  } else {
+    switchTab("daftar");
+  }
+}
+
+function generateBarcodeDataUrl(text) {
+  try {
+    const canvas = document.createElement("canvas");
+    window.JsBarcode(canvas, text, {
+      format: "CODE128",
+      displayValue: true,
+      fontSize: 16,
+      width: 2,
+      height: 55,
+      margin: 6,
+    });
+    return canvas.toDataURL("image/png");
+  } catch (e) {
+    console.error("Gagal membuat barcode:", e);
+    return null;
+  }
+}
+
+function showPrintSizeModal(item) {
+  const root = document.getElementById("modal-root");
+  root.innerHTML = `
+  <div class="modal-bg" id="print-size-modal">
+    <div class="paper" style="max-width:400px; width:100%; padding:26px; text-align:center;">
+      <div class="font-display" style="font-size:18px; margin-bottom:4px;">Cetak Label Barang</div>
+      <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:18px;">Barang ${item.id} tersimpan. Pilih ukuran label untuk ditempel di barang.</div>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <button class="btn" data-size="a5">A5 — Kertas biasa / cetak ke PDF</button>
+        <button class="btn btn-outline" data-size="struk80">Nota 80mm — Printer struk</button>
+        <button class="btn btn-outline" data-size="struk58">Nota 58mm — Printer struk kecil</button>
+      </div>
+      <button id="print-size-skip" class="btn btn-outline" style="margin-top:16px; width:100%; border-color:transparent;">Lewati</button>
+    </div>
+  </div>`;
+  root.querySelectorAll("[data-size]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      printLabel(item, btn.dataset.size);
+      root.innerHTML = "";
+      switchTab("daftar");
+    });
+  });
+  document.getElementById("print-size-skip").addEventListener("click", () => {
+    root.innerHTML = "";
+    switchTab("daftar");
+  });
+}
+
+function printLabel(item, size) {
+  const barcodeUrl = generateBarcodeDataUrl(item.id);
+  const dims = [item.panjang, item.lebar, item.tinggi].filter(Boolean).join(" × ");
+  const statusText = item.status === "terkirim" ? "DIKIRIM" : "DITERIMA";
+  let pageCss, containerWidth, contentHtml;
+
+  if (size === "a5") {
+    pageCss = `@page { size: A5 portrait; margin: 12mm; }`;
+    containerWidth = "100%";
+    contentHtml = `
+      <div class="label-header">GUDANG SENI</div>
+      <div class="label-sub">Label Barang · ${statusText}</div>
+      ${barcodeUrl ? `<img class="barcode" src="${barcodeUrl}" />` : `<div class="font-mono">${item.id}</div>`}
+      <table class="label-table">
+        <tr><td>Seniman/Galeri</td><td>${escapeHtml(item.senimanGaleri) || "-"}</td></tr>
+        <tr><td>Kepada</td><td>${escapeHtml(item.kepada) || "-"}</td></tr>
+        <tr><td>Alamat</td><td>${escapeHtml(item.alamat) || "-"}</td></tr>
+        <tr><td>Pengirim/Penerima</td><td>${escapeHtml(item.pengirimPenerima) || "-"}</td></tr>
+        <tr><td>Dimensi (P×L×T)</td><td>${dims ? dims + " cm" : "-"}</td></tr>
+        <tr><td>Berat</td><td>${item.berat ? item.berat + " kg" : "-"}</td></tr>
+        <tr><td>Keterangan</td><td>${escapeHtml(item.keterangan) || "-"}</td></tr>
+      </table>
+      <div class="label-footer">Dicetak ${fmtDate(new Date().toISOString())}</div>
+    `;
+  } else {
+    const widthMm = size === "struk58" ? 58 : 80;
+    const contentWidthMm = widthMm - 6;
+    pageCss = `@page { size: ${widthMm}mm auto; margin: 3mm; }`;
+    containerWidth = contentWidthMm + "mm";
+    contentHtml = `
+      <div class="label-header">GUDANG SENI</div>
+      ${barcodeUrl ? `<img class="barcode" src="${barcodeUrl}" />` : `<div class="font-mono">${item.id}</div>`}
+      <div class="label-line" style="font-weight:bold;">${statusText}</div>
+      <div class="label-line"><strong>${escapeHtml(item.senimanGaleri) || "-"}</strong></div>
+      <div class="label-line">Kepada: ${escapeHtml(item.kepada) || "-"}</div>
+      <div class="label-line">Dimensi: ${dims ? dims + " cm" : "-"}</div>
+      <div class="label-line">Berat: ${item.berat ? item.berat + " kg" : "-"}</div>
+      <div class="label-footer">${fmtDate(new Date().toISOString())}</div>
+    `;
+  }
+
+  const win = window.open("", "_blank", "width=480,height=700");
+  if (!win) {
+    alert("Popup diblokir browser. Izinkan popup untuk situs ini agar bisa mencetak label.");
+    return;
+  }
+  win.document.write(`<!DOCTYPE html><html><head><title>Label ${item.id}</title>
+    <style>
+      ${pageCss}
+      * { box-sizing:border-box; font-family: Arial, Helvetica, sans-serif; }
+      body { margin:0; padding:10px; display:flex; justify-content:center; }
+      .label { width:${containerWidth}; text-align:center; }
+      .label-header{ font-weight:bold; font-size:16px; letter-spacing:1px; }
+      .label-sub{ font-size:11px; color:#555; margin-bottom:6px; }
+      .barcode{ width:100%; max-width:280px; margin:6px auto; display:block; }
+      .label-table{ width:100%; border-collapse:collapse; font-size:11px; text-align:left; margin-top:6px; }
+      .label-table td{ padding:3px 4px; border-bottom:1px solid #ddd; vertical-align:top; }
+      .label-table td:first-child{ font-weight:bold; width:38%; color:#333; }
+      .label-line{ font-size:11px; text-align:left; margin:2px 0; }
+      .label-footer{ font-size:9px; color:#888; margin-top:8px; }
+    </style>
+    </head><body><div class="label">${contentHtml}</div></body></html>`);
+  win.document.close();
+  const triggerPrint = () => { try { win.focus(); win.print(); } catch (e) {} };
+  win.onload = triggerPrint;
+  setTimeout(triggerPrint, 350);
 }
 
 async function doDelete() {
@@ -972,7 +1093,11 @@ function attachHandlers() {
     renderPhotoGrid();
     document.getElementById("btn-save").addEventListener("click", () => {
       const missing = getMissingFields();
-      showConfirmSaveModal(missing, doSave);
+      showConfirmSaveModal(missing, () => doSave(false));
+    });
+    document.getElementById("btn-save-print").addEventListener("click", () => {
+      const missing = getMissingFields();
+      showConfirmSaveModal(missing, () => doSave(true));
     });
     document.getElementById("btn-cancel").addEventListener("click", () => switchTab(editingId ? "daftar" : "daftar"));
     const delBtn = document.getElementById("btn-delete");
