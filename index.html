@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
   :root{
     --kraft:#EFE7D6;
@@ -214,6 +216,7 @@ function signOut() {
   folderId = null;
   dbFileId = null;
   photoUrlCache = {};
+  artistFolderCache = {};
   document.getElementById("app-screen").style.display = "none";
   document.getElementById("login-screen").style.display = "flex";
 }
@@ -329,6 +332,32 @@ async function uploadMultipart(parentId, filename, mimeType, contentStringOrBlob
   return res.json();
 }
 
+let artistFolderCache = {};
+function escapeForDriveQuery(s) {
+  return (s || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+async function getOrCreateArtistFolder(name) {
+  const safeName = (name || "").trim() || "Tanpa Nama";
+  if (artistFolderCache[safeName]) return artistFolderCache[safeName];
+  const q = encodeURIComponent(`name='${escapeForDriveQuery(safeName)}' and mimeType='application/vnd.google-apps.folder' and '${folderId}' in parents and trashed=false`);
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`, { headers: authHeaders() });
+  const data = await res.json();
+  let id;
+  if (data.files && data.files.length > 0) {
+    id = data.files[0].id;
+  } else {
+    const createRes = await fetch("https://www.googleapis.com/drive/v3/files", {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ name: safeName, mimeType: "application/vnd.google-apps.folder", parents: [folderId] }),
+    });
+    const created = await createRes.json();
+    id = created.id;
+  }
+  artistFolderCache[safeName] = id;
+  return id;
+}
+
 async function deleteDriveFile(fileId) {
   try {
     await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, { method: "DELETE", headers: authHeaders() });
@@ -439,14 +468,18 @@ function emptyState(msg) {
 }
 
 /* =========================== DAFTAR / PENCARIAN =========================== */
-function renderDaftar() {
-  const filtered = items.filter(it => {
+function getFilteredItems() {
+  return items.filter(it => {
     if (statusFilter !== "all" && (it.status || "gudang") !== statusFilter) return false;
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
-    return [it.id, it.kepada, it.alamat, it.pengirimPenerima, it.keterangan]
+    return [it.id, it.senimanGaleri, it.kepada, it.alamat, it.pengirimPenerima, it.keterangan]
       .some(f => (f || "").toLowerCase().includes(q));
   }).sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+}
+
+function renderDaftar() {
+  const filtered = getFilteredItems();
 
   return `
   <div class="font-display" style="font-size:13px; color:var(--ink-soft); margin-bottom:4px;">— Cari & Kelola —</div>
@@ -459,6 +492,7 @@ function renderDaftar() {
       <button class="btn ${statusFilter === "terkirim" ? "" : "btn-outline"}" data-filter="terkirim" style="padding:8px 14px; font-size:12px;">Terkirim</button>
     </div>
     <button id="btn-export-csv" class="btn btn-outline" style="padding:8px 14px; font-size:12px; margin-left:auto;">Ekspor CSV</button>
+    <button id="btn-export-pdf" class="btn" style="padding:8px 14px; font-size:12px;">Ekspor PDF</button>
   </div>
   <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px;">
     ${filtered.length === 0 ? emptyState("Tidak ada barang yang cocok.") : filtered.map(itemCard).join("")}
@@ -473,6 +507,7 @@ function itemCard(it) {
       <span class="font-mono" style="font-size:12px; color:var(--ink-soft);">${it.id}</span>
       ${statusBadge(it.status)}
     </div>
+    <div class="font-display" style="font-size:12px; color:var(--stamp-red); margin-bottom:2px;">${escapeHtml(it.senimanGaleri) || "Tanpa Nama"}</div>
     <div style="font-weight:600; font-size:15px; margin-bottom:2px;">${escapeHtml(it.kepada) || "(tanpa nama)"}</div>
     <div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:8px;">${escapeHtml(it.alamat) || "-"}</div>
     <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--ink-soft);">
@@ -498,6 +533,12 @@ function renderForm() {
   ${editing ? `<div style="font-size:12px; color:var(--ink-soft); margin-bottom:18px;">Dibuat ${fmtDate(editing.createdAt)} · Terakhir diubah ${fmtDate(editing.updatedAt)}</div>` : `<div style="margin-bottom:18px;"></div>`}
 
   <div class="paper" style="padding:22px;">
+    <div style="margin-bottom:14px;">
+      <label class="req">Seniman / Galeri</label>
+      <input id="f-seniman" value="${escapeHtml(it.senimanGaleri)}" placeholder="Nama seniman atau galeri" />
+      <div style="font-size:11.5px; color:var(--ink-soft); margin-top:4px;">Dipakai juga sebagai nama folder terpisah di Google Drive.</div>
+    </div>
+
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px;">
       <div>
         <label class="req">Diterima / Dikirim</label>
@@ -613,6 +654,7 @@ function renderPhotoGrid() {
 
 function getMissingFields() {
   const required = [
+    ["f-seniman", "Seniman/Galeri"],
     ["f-kepada", "Kepada"],
     ["f-alamat", "Alamat"],
     ["f-pengirim", "Pengirim/Penerima"],
@@ -631,6 +673,7 @@ function getMissingFields() {
 
 function collectFormData() {
   return {
+    senimanGaleri: document.getElementById("f-seniman").value.trim(),
     status: document.getElementById("f-status").value,
     kepada: document.getElementById("f-kepada").value.trim(),
     alamat: document.getElementById("f-alamat").value.trim(),
@@ -677,18 +720,22 @@ async function doSave() {
   const id = isEdit ? editingId : generateId();
   const now = new Date().toISOString();
 
+  setSync("Menyiapkan folder seniman/galeri…", true);
+  const artistFolderId = await getOrCreateArtistFolder(data.senimanGaleri);
+
   setSync("Mengunggah foto…", true);
-  // upload any pending photo files
+  // upload any pending photo files into the artist/gallery's own folder
   for (let i = 0; i < formPhotos.length; i++) {
     const p = formPhotos[i];
     if (p && p.pendingFile) {
-      const uploaded = await uploadMultipart(folderId, `${id}_slot${i}_${Date.now()}.jpg`, p.pendingFile.type || "image/jpeg", p.pendingFile);
+      const uploaded = await uploadMultipart(artistFolderId, `${id}_slot${i}_${Date.now()}.jpg`, p.pendingFile.type || "image/jpeg", p.pendingFile);
       formPhotos[i] = { fileId: uploaded.id };
     }
   }
 
   const record = {
     id,
+    senimanGaleri: data.senimanGaleri,
     status: data.status,
     kepada: data.kepada,
     alamat: data.alamat,
@@ -732,8 +779,8 @@ function renderPengaturan() {
   <div class="paper" style="padding:20px; margin-bottom:14px;">
     <div style="font-weight:600; margin-bottom:6px;">Lokasi Penyimpanan</div>
     <p style="font-size:13.5px; color:var(--ink-soft); line-height:1.6;">
-      Semua data dan foto disimpan di folder <span class="font-mono">${FOLDER_NAME}</span> pada Google Drive akun yang sedang masuk.
-      Data berupa file <span class="font-mono">${DB_FILE_NAME}</span> dan foto sebagai file gambar terpisah.
+      Semua data disimpan di folder <span class="font-mono">${FOLDER_NAME}</span> pada Google Drive akun yang sedang masuk, dalam file <span class="font-mono">${DB_FILE_NAME}</span>.
+      Foto tiap barang disimpan di dalam subfolder sesuai nama <strong>Seniman/Galeri</strong> yang diisi — jadi setiap seniman/galeri punya folder fotonya sendiri.
     </p>
   </div>
   <div class="paper" style="padding:20px;">
@@ -745,9 +792,9 @@ function renderPengaturan() {
 
 /* =========================== CSV EXPORT =========================== */
 function exportCsv() {
-  const headers = ["ID","Status","Kepada","Alamat","Pengirim/Penerima","Panjang","Lebar","Tinggi","Berat","Keterangan","Dibuat","Diubah"];
+  const headers = ["ID","Seniman/Galeri","Status","Kepada","Alamat","Pengirim/Penerima","Panjang","Lebar","Tinggi","Berat","Keterangan","Dibuat","Diubah"];
   const rows = items.map(it => [
-    it.id, it.status === "terkirim" ? "Dikirim" : "Diterima", it.kepada, it.alamat, it.pengirimPenerima,
+    it.id, it.senimanGaleri, it.status === "terkirim" ? "Dikirim" : "Diterima", it.kepada, it.alamat, it.pengirimPenerima,
     it.panjang, it.lebar, it.tinggi, it.berat, (it.keterangan||"").replace(/\n/g," "), fmtDate(it.createdAt), fmtDate(it.updatedAt)
   ]);
   const csv = [headers, ...rows].map(r => r.map(v => `"${(v??"").toString().replace(/"/g,'""')}"`).join(",")).join("\r\n");
@@ -756,6 +803,63 @@ function exportCsv() {
   a.href = URL.createObjectURL(blob);
   a.download = "gudang-seni-" + new Date().toISOString().slice(0,10) + ".csv";
   a.click();
+}
+
+/* =========================== PDF EXPORT =========================== */
+function exportPdf() {
+  if (!window.jspdf) {
+    alert("Gagal memuat pustaka PDF. Pastikan perangkat terhubung internet, lalu coba lagi.");
+    return;
+  }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+  const data = getFilteredItems();
+
+  const total = data.length;
+  const diGudang = data.filter(i => i.status !== "terkirim").length;
+  const terkirim = data.filter(i => i.status === "terkirim").length;
+  const totalBerat = data.reduce((s, i) => s + (parseFloat(i.berat) || 0), 0);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.text("Laporan Gudang Seni", 40, 40);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.text("Dicetak: " + fmtDate(new Date().toISOString()), 40, 58);
+
+  const filterLabel = statusFilter === "gudang" ? "Di Gudang" : statusFilter === "terkirim" ? "Sudah Dikirim" : "Semua Status";
+  doc.text(
+    `Filter: ${filterLabel}${searchQuery ? ` · Pencarian: "${searchQuery}"` : ""} · Total: ${total} barang · Di Gudang: ${diGudang} · Terkirim: ${terkirim} · Total Berat: ${totalBerat.toLocaleString("id-ID")} kg`,
+    40, 74
+  );
+
+  const rows = data.map(it => [
+    it.id,
+    it.senimanGaleri || "-",
+    it.status === "terkirim" ? "Dikirim" : "Diterima",
+    it.kepada || "-",
+    it.alamat || "-",
+    it.pengirimPenerima || "-",
+    [it.panjang, it.lebar, it.tinggi].filter(Boolean).join("×") || "-",
+    it.berat ? it.berat + " kg" : "-",
+    it.keterangan || "-",
+  ]);
+
+  doc.autoTable({
+    startY: 90,
+    head: [["ID", "Seniman/Galeri", "Status", "Kepada", "Alamat", "Pengirim/Penerima", "Dimensi (cm)", "Berat", "Keterangan"]],
+    body: rows,
+    styles: { fontSize: 8, cellPadding: 4, overflow: "linebreak" },
+    headStyles: { fillColor: [34, 30, 26], textColor: [255, 255, 255] },
+    columnStyles: {
+      0: { cellWidth: 55 },
+      6: { cellWidth: 55 },
+      7: { cellWidth: 45 },
+    },
+    margin: { left: 40, right: 40 },
+  });
+
+  doc.save("laporan-gudang-seni-" + new Date().toISOString().slice(0, 10) + ".pdf");
 }
 
 /* =========================== DETAIL VIEW MODAL =========================== */
@@ -777,6 +881,7 @@ function attachHandlers() {
       btn.addEventListener("click", () => { statusFilter = btn.dataset.filter; render(); });
     });
     document.getElementById("btn-export-csv").addEventListener("click", exportCsv);
+    document.getElementById("btn-export-pdf").addEventListener("click", exportPdf);
     document.querySelectorAll("[data-open-btn]").forEach(btn => {
       btn.addEventListener("click", () => openDetail(btn.dataset.openBtn));
     });
