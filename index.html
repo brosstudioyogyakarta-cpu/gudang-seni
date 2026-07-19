@@ -172,6 +172,7 @@ const TERJAGA_LOGO_URL = "data:image/webp;base64,UklGRvIdAABXRUJQVlA4IOYdAACQegC
 /* =========================== STATE =========================== */
 let tokenClient = null;
 let accessToken = null;
+const SESSION_KEY = "terjaga_session";
 let folderId = null;
 let dbFileId = null;
 let items = [];
@@ -202,6 +203,7 @@ window.addEventListener("load", () => {
         return;
       }
       accessToken = resp.access_token;
+      saveSession(resp.access_token, resp.expires_in);
       await onSignedIn();
     },
   });
@@ -213,7 +215,40 @@ window.addEventListener("load", () => {
   document.querySelectorAll(".tab-btn").forEach(btn => {
     btn.addEventListener("click", () => switchTab(btn.dataset.tab));
   });
+
+  // Coba lanjutkan sesi sebelumnya (kalau masih berlaku) supaya tidak perlu login ulang tiap refresh
+  const restored = loadSession();
+  if (restored) {
+    accessToken = restored;
+    onSignedIn();
+  }
 });
+
+function saveSession(token, expiresInSeconds) {
+  try {
+    const expiresAt = Date.now() + ((expiresInSeconds || 3300) * 1000);
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ token, expiresAt }));
+  } catch (e) { /* sessionStorage tidak tersedia, lewati saja */ }
+}
+
+function loadSession() {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data.token || !data.expiresAt || Date.now() > data.expiresAt - 30000) {
+      sessionStorage.removeItem(SESSION_KEY);
+      return null;
+    }
+    return data.token;
+  } catch (e) {
+    return null;
+  }
+}
+
+function clearSession() {
+  try { sessionStorage.removeItem(SESSION_KEY); } catch (e) {}
+}
 
 function setLoginStatus(msg) {
   document.getElementById("login-status").textContent = msg;
@@ -229,6 +264,7 @@ function signOut() {
   dbFileId = null;
   photoUrlCache = {};
   artistFolderCache = {};
+  clearSession();
   document.getElementById("app-screen").style.display = "none";
   document.getElementById("login-screen").style.display = "flex";
 }
@@ -245,7 +281,12 @@ async function onSignedIn() {
     switchTab("dashboard");
   } catch (e) {
     console.error(e);
-    setSync("Gagal memuat data. Coba refresh.", false);
+    // Kemungkinan sesi/token sudah tidak valid — kembalikan ke layar login
+    clearSession();
+    accessToken = null;
+    document.getElementById("app-screen").style.display = "none";
+    document.getElementById("login-screen").style.display = "flex";
+    setLoginStatus("Sesi berakhir. Silakan masuk kembali.");
   }
 }
 
