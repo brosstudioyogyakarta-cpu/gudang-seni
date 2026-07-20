@@ -108,9 +108,13 @@
 
   /* ============ TAMPILAN HP (RESPONSIVE) ============ */
   @media (max-width: 680px) {
-    header{ padding:10px 14px !important; }
-    header nav{ flex-wrap:wrap; gap:2px !important; }
-    .tab-btn{ font-size:11.5px !important; padding:8px 10px !important; }
+    #app-header{ flex-direction:column; align-items:stretch !important; padding:10px 14px !important; gap:8px !important; }
+    .header-left{ flex-direction:column; align-items:stretch !important; gap:8px !important; }
+    .header-brand{ justify-content:space-between; }
+    .header-right{ justify-content:space-between; }
+    #app-nav{ flex-wrap:nowrap !important; gap:2px !important; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:2px; margin:0 -4px; padding-left:4px; padding-right:4px; }
+    #app-nav::-webkit-scrollbar{ height:3px; }
+    .tab-btn{ font-size:12px !important; padding:8px 11px !important; white-space:nowrap; flex:none; }
     main{ padding:16px 10px 50px 10px !important; }
     .paper{ padding:16px !important; }
     .grid-2col{ grid-template-columns:1fr !important; }
@@ -151,20 +155,20 @@
 
 <!-- ======================= APP SCREEN ======================= -->
 <div id="app-screen" style="display:none;">
-  <header class="paper" style="border-left:none; border-right:none; border-top:none; padding:14px 22px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:20; flex-wrap:wrap; gap:10px;">
-    <div style="display:flex; align-items:center; gap:14px;">
-      <div style="display:flex; align-items:center; gap:8px;">
+  <header class="paper" id="app-header" style="border-left:none; border-right:none; border-top:none; padding:14px 22px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:20; flex-wrap:wrap; gap:10px;">
+    <div class="header-left" style="display:flex; align-items:center; gap:14px;">
+      <div class="header-brand" style="display:flex; align-items:center; gap:8px;">
         <img id="header-logo" alt="TERJAGA" style="width:32px; height:32px; border-radius:6px; object-fit:cover;" />
         <div class="font-display" style="font-size:20px;">Terjaga</div>
       </div>
-      <nav style="display:flex; gap:4px;">
+      <nav id="app-nav" style="display:flex; gap:4px;">
         <button class="tab-btn" data-tab="dashboard">Dashboard</button>
         <button class="tab-btn" data-tab="daftar">Daftar Barang</button>
         <button class="tab-btn" data-tab="tambah">Tambah Barang</button>
         <button class="tab-btn" data-tab="pengaturan">Pengaturan</button>
       </nav>
     </div>
-    <div style="display:flex; align-items:center; gap:10px;">
+    <div class="header-right" style="display:flex; align-items:center; gap:10px;">
       <span id="sync-indicator" style="font-size:12px; color:var(--ink-soft); display:flex; align-items:center; gap:6px;"></span>
       <button id="btn-signout" class="btn btn-outline" style="font-size:11px; padding:7px 12px;">Keluar</button>
     </div>
@@ -676,6 +680,50 @@ function renderForm() {
 
 let lightboxIndex = null;
 
+function showAddPhotoChoice() {
+  const root = document.getElementById("modal-root");
+  root.innerHTML = `
+  <div class="modal-bg" id="photo-choice-modal">
+    <div class="paper" style="max-width:320px; width:100%; padding:24px; text-align:center;">
+      <div class="font-display" style="font-size:16px; margin-bottom:16px;">Tambah Foto</div>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <button id="choice-camera" class="btn">📷 Ambil Foto (Kamera)</button>
+        <button id="choice-gallery" class="btn btn-outline">🖼️ Pilih dari Galeri</button>
+      </div>
+      <button id="choice-cancel" class="btn btn-outline" style="margin-top:14px; width:100%; border-color:transparent;">Batal</button>
+    </div>
+  </div>`;
+  document.getElementById("choice-camera").addEventListener("click", () => { root.innerHTML = ""; openPhotoInput(true); });
+  document.getElementById("choice-gallery").addEventListener("click", () => { root.innerHTML = ""; openPhotoInput(false); });
+  document.getElementById("choice-cancel").addEventListener("click", () => { root.innerHTML = ""; });
+  document.getElementById("photo-choice-modal").addEventListener("click", (e) => {
+    if (e.target.id === "photo-choice-modal") root.innerHTML = "";
+  });
+}
+
+function openPhotoInput(useCamera) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  if (useCamera) {
+    input.capture = "environment"; // buka kamera langsung di HP
+  } else {
+    input.multiple = true; // pilih banyak foto sekaligus dari galeri
+  }
+  input.onchange = () => {
+    const remaining = 10 - formPhotos.length;
+    const files = Array.from(input.files).slice(0, remaining);
+    if (input.files.length > remaining) {
+      alert(`Hanya ${remaining} foto lagi yang bisa ditambahkan (maks. 10 foto per barang). ${input.files.length - remaining} foto terakhir tidak ditambahkan.`);
+    }
+    files.forEach(file => {
+      formPhotos.push({ pendingFile: file, previewUrl: URL.createObjectURL(file), name: file.name });
+    });
+    renderPhotoGrid();
+  };
+  input.click();
+}
+
 function renderPhotoGrid() {
   const grid = document.getElementById("photo-grid");
   if (!grid) return;
@@ -708,24 +756,7 @@ function renderPhotoGrid() {
 
   const addTile = document.getElementById("add-photo-tile");
   if (addTile) {
-    addTile.addEventListener("click", () => {
-      const input = document.createElement("input");
-      input.type = "file";
-      input.accept = "image/*";
-      input.multiple = true;
-      input.onchange = () => {
-        const remaining = 10 - formPhotos.length;
-        const files = Array.from(input.files).slice(0, remaining);
-        if (input.files.length > remaining) {
-          alert(`Hanya ${remaining} foto lagi yang bisa ditambahkan (maks. 10 foto per barang). ${input.files.length - remaining} foto terakhir tidak ditambahkan.`);
-        }
-        files.forEach(file => {
-          formPhotos.push({ pendingFile: file, previewUrl: URL.createObjectURL(file), name: file.name });
-        });
-        renderPhotoGrid();
-      };
-      input.click();
-    });
+    addTile.addEventListener("click", showAddPhotoChoice);
   }
 
   grid.querySelectorAll("[data-view-idx]").forEach(slotEl => {
